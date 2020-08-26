@@ -14,6 +14,8 @@ class ExprTreeEvaluator {
     map<string,int> memory;
 public:
     int run(pANTLR3_BASE_TREE);
+    void set_param(string, int);
+    int get_param(string);
 };
  
 pANTLR3_BASE_TREE getChild(pANTLR3_BASE_TREE, unsigned);
@@ -34,7 +36,7 @@ int main(int argc, char* argv[])
   parser = ExprCppTreeParserNew(tokens);
  
   ExprCppTreeParser_prog_return r = parser->prog(parser);
- 
+  cout << "done" << endl;
   pANTLR3_BASE_TREE tree = r.tree;
  
   ExprTreeEvaluator eval;
@@ -47,6 +49,21 @@ int main(int argc, char* argv[])
   input->close(input);
  
   return 0;
+}
+
+void ExprTreeEvaluator::set_param(string name, int val) {
+    if (memory.find(name) != memory.end()) {
+        throw std::runtime_error("param redefined : " + name);
+    }
+    memory[name] = val;
+    return ;
+}
+
+int  ExprTreeEvaluator::get_param(string name) {
+    if (memory.find(name) == memory.end()) {
+        throw std::runtime_error("unknow param : " + name);
+    }
+    return memory[name];
 }
  
 int ExprTreeEvaluator::run(pANTLR3_BASE_TREE tree)
@@ -77,6 +94,21 @@ int ExprTreeEvaluator::run(pANTLR3_BASE_TREE tree)
             return run(getChild(tree, 0)) / run(getChild(tree, 1));
         case MOD:
             return run(getChild(tree, 0)) % run(getChild(tree, 1));
+        case DEF: {
+            int k = tree->getChildCount(tree);
+            int init_val = 0;
+            for (int i = 0; i < k ; i++) {
+                pANTLR3_BASE_TREE child = getChild(tree, i);
+                string var(getText(child));
+                init_val = 0;
+                if (child->getChildCount(child) == 1) {
+                    init_val = run(getChild(child, 0));
+                }
+                cout << "set param val : " << var << " = " << init_val << endl;
+                this->set_param(var, init_val);
+            }
+            return init_val;
+        } break;
         case ASSIGN: {
             string var(getText(getChild(tree,0)));
             int val = run(getChild(tree,1));
@@ -97,6 +129,7 @@ int ExprTreeEvaluator::run(pANTLR3_BASE_TREE tree)
         }
         return r;
     }
+    return 0;
 }
  
 pANTLR3_BASE_TREE getChild(pANTLR3_BASE_TREE tree, unsigned i)
@@ -109,3 +142,4 @@ const char* getText(pANTLR3_BASE_TREE tree)
 {
     return (const char*) tree->getText(tree)->chars;
 }
+
