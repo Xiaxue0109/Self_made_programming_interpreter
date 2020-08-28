@@ -4,7 +4,6 @@
 #include <map>
 #include <string>
 #include <iostream>
- 
 using std::map;
 using std::string;
 using std::cout;
@@ -13,9 +12,13 @@ using std::endl;
 class ExprTreeEvaluator {
     map<string,int> memory;
 public:
+    ExprTreeEvaluator() : next(nullptr) {}
+    ExprTreeEvaluator(ExprTreeEvaluator *next) : next(next) {}
     int run(pANTLR3_BASE_TREE);
+    void def_param(string, int);
     void set_param(string, int);
     int get_param(string);
+    ExprTreeEvaluator *next;
 };
  
 pANTLR3_BASE_TREE getChild(pANTLR3_BASE_TREE, unsigned);
@@ -36,7 +39,6 @@ int main(int argc, char* argv[])
   parser = ExprCppTreeParserNew(tokens);
  
   ExprCppTreeParser_prog_return r = parser->prog(parser);
-  cout << "done" << endl;
   pANTLR3_BASE_TREE tree = r.tree;
  
   ExprTreeEvaluator eval;
@@ -51,23 +53,40 @@ int main(int argc, char* argv[])
   return 0;
 }
 
-void ExprTreeEvaluator::set_param(string name, int val) {
+void ExprTreeEvaluator::def_param(string name, int val) {
     if (memory.find(name) != memory.end()) {
+        #ifdef DEBUG
+        for (auto x : memory) {
+            cout << "debug log(memory) : " << x.first << " " << x.second << endl;
+        }
+        #endif
         throw std::runtime_error("param redefined : " + name);
     }
     memory[name] = val;
     return ;
 }
 
-int  ExprTreeEvaluator::get_param(string name) {
+void ExprTreeEvaluator::set_param(string name, int val) {
     if (memory.find(name) == memory.end()) {
-        throw std::runtime_error("unknow param : " + name);
+        if (this->next) {
+            this->next->set_param(name, val);
+            return ;
+        }
+        throw std::runtime_error("unknown param : " + name);
+    }
+    memory[name] = val;
+    return ;
+}
+
+int ExprTreeEvaluator::get_param(string name) {
+    if (memory.find(name) == memory.end()) {
+        if (this->next) return this->next->get_param(name);
+        throw std::runtime_error("unknown param : " + name);
     }
     return memory[name];
 }
- 
-int ExprTreeEvaluator::run(pANTLR3_BASE_TREE tree)
-{
+
+int ExprTreeEvaluator::run(pANTLR3_BASE_TREE tree) {
     pANTLR3_COMMON_TOKEN tok = tree->getToken(tree);
     if(tok) {
         switch(tok->type) {
@@ -82,7 +101,7 @@ int ExprTreeEvaluator::run(pANTLR3_BASE_TREE tree)
         }
         case ID: {
             string var(getText(tree));
-            return memory[var];
+            return get_param(var);
         }
         case PLUS:
             return run(getChild(tree,0)) + run(getChild(tree,1));
@@ -91,28 +110,38 @@ int ExprTreeEvaluator::run(pANTLR3_BASE_TREE tree)
         case TIMES:
             return run(getChild(tree,0)) * run(getChild(tree,1));
         case DIV:
-            return run(getChild(tree, 0)) / run(getChild(tree, 1));
+            return run(getChild(tree,0)) / run(getChild(tree,1));
         case MOD:
-            return run(getChild(tree, 0)) % run(getChild(tree, 1));
-        case DEF: {
+            return run(getChild(tree,0)) % run(getChild(tree,1));
+        case BLOCK: {
+            ExprTreeEvaluator new_this(this);
+            int k = tree->getChildCount(tree);
+            for (int i = 0; i < k; i++) {
+                int val = new_this.run(getChild(tree, i));
+                cout << "Block Value : " << val << endl;
+            }
+            return 0;
+        } break;
+        case DEF: { 
             int k = tree->getChildCount(tree);
             int init_val = 0;
-            for (int i = 0; i < k ; i++) {
+            for (int i = 0; i < k; i++) {
                 pANTLR3_BASE_TREE child = getChild(tree, i);
                 string var(getText(child));
                 init_val = 0;
                 if (child->getChildCount(child) == 1) {
                     init_val = run(getChild(child, 0));
                 }
-                cout << "set param val : " << var << " = " << init_val << endl;
-                this->set_param(var, init_val);
+                cout << "def param val : " << var << " = " << init_val << endl;
+                this->def_param(var, init_val);
             }
             return init_val;
         } break;
         case ASSIGN: {
             string var(getText(getChild(tree,0)));
+            get_param(var);
             int val = run(getChild(tree,1));
-            memory[var] = val;
+            set_param(var, val);
             return val;
         }
         default:
@@ -125,7 +154,7 @@ int ExprTreeEvaluator::run(pANTLR3_BASE_TREE tree)
         int r = 0;
         for(int i = 0; i < k; i++) {
             r = run(getChild(tree, i));
-            cout << "Evaluator value : " << r << endl; 
+            cout << "Evaluator result: " << r << endl;
         }
         return r;
     }
@@ -137,7 +166,7 @@ pANTLR3_BASE_TREE getChild(pANTLR3_BASE_TREE tree, unsigned i)
     assert(i < tree->getChildCount(tree));
     return (pANTLR3_BASE_TREE) tree->getChild(tree, i);
 }
- 
+
 const char* getText(pANTLR3_BASE_TREE tree)
 {
     return (const char*) tree->getText(tree)->chars;

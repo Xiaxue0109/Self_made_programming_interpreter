@@ -45,8 +45,8 @@ BLOCK: '__block__';
 
 stmt: expr ';'  NEWLINE -> expr  // tree rewrite syntax
     | ID ASSIGN expr ';' NEWLINE -> ^(ASSIGN ID expr) // tree notation
-    | defid NEWLINE ->defid
-    | block
+    | defid NEWLINE -> defid
+    | block NEWLINE -> block
     | NEWLINE ->   // ignore
     ;
 
@@ -54,11 +54,14 @@ ASSIGN: '=';
  
 prog
     : (stmt {
-        #ifdef INFOMSG
-        pANTLR3_STRING s = $stmt.tree->toStringTree($stmt.tree);
-             assert(s->chars);
-             printf(" haizei tree \%s\n", s->chars);
-             fflush(stdout);
+        #ifdef DEBUG
+        do {
+            pANTLR3_STRING s = $stmt.tree->toStringTree($stmt.tree);
+            if (s->chars == NULL) break;
+            assert(s->chars);
+            printf(" haizei tree \%s\n", s->chars);
+            fflush(stdout);
+        } while (0);
         #endif    
         }
         )+
